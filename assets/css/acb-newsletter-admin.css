@@ -1,0 +1,8 @@
+@charset "utf-8";
+/* CSS Document */
+
+body#tinymce {
+  max-width: 600px !important;
+  font-size: 14px !important;
+  line-height: 18px !important;
+}
