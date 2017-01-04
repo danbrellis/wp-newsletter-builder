@@ -7,4 +7,6 @@ Using an FTP program, or your hosting control panel, upload the unzipped plugin 
 Activate the plugin from the Plugins menu within the WordPress admin.
 
 #Usage
-While a newsletter template file is included in the plugin, you can take add your own flare by uploading your own template file to override it in `your-theme-folder/plugins/wp-newsletter-builder/templates/content-newsletter.php`
+Pending...
+
+//While a newsletter template file is included in the plugin, you can take add your own flare by uploading your own template file to override it in `your-theme-folder/plugins/wp-newsletter-builder/templates/content-newsletter.php`
