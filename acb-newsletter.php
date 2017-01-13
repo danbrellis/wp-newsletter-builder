@@ -285,11 +285,4 @@ class ACBNEWS {
  */
 $GLOBALS['ACBNEWS'] = new ACBNEWS();
 
-function acb_news_wp_enqueue_scripts() {
-	if ( 'e_newsletter' == get_post_type() && is_single() && !is_admin() ){
-		wp_dequeue_style('sage/css');
-	}
-}
-add_action('wp_enqueue_scripts', 'acb_news_wp_enqueue_scripts', 99999);
-
 ?>
