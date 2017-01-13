@@ -3,7 +3,7 @@
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 
 /**
- * DLM_Admin class.
+ * ACB_Newsletter_Admin class.
  */
 class ACB_Newsletter_Admin {
 
@@ -18,13 +18,17 @@ class ACB_Newsletter_Admin {
 	public function __construct() {
 
 		add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue_scripts' ) );
-		add_filter('tiny_mce_before_init', array($this, 'tiny_mce_before_init') );
+		add_filter( 'tiny_mce_before_init', array($this, 'tiny_mce_before_init') );
 		add_filter( 'post_row_actions', array($this, 'post_row_actions'), 10, 2 );
 		add_action( 'admin_menu', array( $this, 'admin_menu' ), 12 );
 		//add_action( 'admin_init', array( $this, 'register_settings' ) );
 		
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_boxes' ), 10, 2 );
 		add_action( 'save_post', array($this, 'save_metadata') );
+		
+		add_action('wp_ajax_newsletter_lookup', array($this, 'newsletter_lookup') );
+		add_action('wp_ajax_acb_newsletter_get_posturl_by_id', array($this, 'acb_newsletter_get_posturl_by_id') );
+		add_action('wp_ajax_acb_newsletter_add_item', array($this, 'acb_newsletter_add_item') );
 	}
 
 	/**
@@ -184,10 +188,25 @@ class ACB_Newsletter_Admin {
 	public function admin_enqueue_scripts( $hook ) {
 		global $ACBNEWS, $post;
 		
-		if($post->post_type == 'acb_newsletter_item')
-			wp_enqueue_style( 'acb_newsletter_admin_css', $ACBNEWS->plugin_url() . '/assets/css/acb-newsletter-admin.css' );
+		if(isset($post) && isset($post->post_type)){
+			if(in_array($post->post_type, array('acb_newsletter_item', 'e_newsletter')))
+				 wp_enqueue_style( 'acb_newsletter_admin_css', $ACBNEWS->plugin_url() . '/assets/css/acb-newsletter-admin.css' );
+			
+			if($post->post_type == 'e_newsletter')
+				wp_enqueue_script('jquery-ui-sortable');
+
+			
+			$atn_pts = get_post_types( array(
+				'show_ui' => true,
+				'_builtin' => false
+			) );
+			array_push($atn_pts, 'page', 'post');
+			if(in_array($post->post_type, $atn_pts)){
+				wp_enqueue_script('suggest');
+				wp_enqueue_script('acb_newsletter_admin_js', $ACBNEWS->plugin_url() . '/assets/js/acb-newsletter-admin.js', array('jquery', 'suggest'), false, true );
+			}
+		}
 	}
-	
 	/**
 	 * Modify tinyMce params
 	 */
@@ -222,11 +241,26 @@ class ACB_Newsletter_Admin {
 	 * @return void
 	 */
 	public function admin_menu() {
-		add_submenu_page( 'edit.php?post_type=e_newsletter', __( 'Compile for Email', 'acb_nwsltr' ), __( 'Compile', 'acb_nwsltr' ), 'publish_posts', 'acb-newsletter-compile', array( $this, 'compile_page' ) );
+		add_submenu_page( 
+			'edit.php?post_type=e_newsletter', 
+			__( 'Add New Newsletter Item', 'acb_nwsltr' ), 
+			__( 'Add Newsletter Item', 'acb_nwsltr' ), 
+			'edit_posts', 
+			'post-new.php?post_type=acb_newsletter_item'
+		);
+		
+		add_submenu_page( 
+			'edit.php?post_type=e_newsletter', 
+			__( 'Compile for Email', 'acb_nwsltr' ), 
+			__( 'Compile', 'acb_nwsltr' ), 
+			'publish_posts', 
+			'acb-newsletter-compile', 
+			array( $this, 'compile_page' ) 
+		);
 	}
 
 	/**
-	 * settings_page function.
+	 * compile_page function.
 	 *
 	 * @access public
 	 * @return void
@@ -234,51 +268,51 @@ class ACB_Newsletter_Admin {
 	public function compile_page() {
 		global $ACBNEWS, $acb_newsletter; ?>
 		<div class="wrap">
-	        <div id="icon-edit" class="icon32 icon32-posts-dlm_download"></div>
-	        <h2><?php _e( 'Compile for Email', 'acb_nwsltr' ); ?></h2>
-            <?php $nwsltr_id = intval($_GET['nwsltr_id']);
-			$GLOBALS['acb_newsletter'] = new ACB_Newsletter( $nwsltr_id );
-			if($acb_newsletter->exists()): ?>
+			<div id="icon-edit" class="icon32 icon32-posts-dlm_download"></div>
+			<h2><?php _e( 'Compile for Email', 'acb_nwsltr' ); ?></h2>
+				<?php $nwsltr_id = isset($_GET['nwsltr_id']) ? intval($_GET['nwsltr_id']) : false;
+				$GLOBALS['acb_newsletter'] = new ACB_Newsletter( $nwsltr_id );
+				if($acb_newsletter->exists()): ?>
                 <?php //send data request
-				if($acb_newsletter->start_inlining()):
-					$args = array(
-						'method' => 'POST',
-						'timeout' => 45,
-						'redirection' => 5,
-						'httpversion' => '1.0',
-						'blocking' => true,
-						//'body' => array( 'returnraw' => 'yes', 'source' => $acb_newsletter->email_html ),
-						'body' => array( 
-							'line_length'				=> 65,
-							'adapter'					=> 'nokogiri',
-							'html' 						=> $acb_newsletter->email_html,
-							'base_url'					=> get_bloginfo('url'),
-							'preserve_styles'			=> true,
-							'remove_ids'				=> false,
-							'remove_classes'			=> false,
-							'remove_comments'			=> false
-						)
-					);
-					/**
-					 * Unfortunately, there is no reliable API for inlining an HTML document for email via an HTTP POST request.
-					 * Hence, until such time, the user has to take the html and paste it into an inliner 
-					 *
-					 * Posible inliner APIs include:
-					 	- http://premailer.dialect.ca/api
-						- http://inlinestyler.torchboxapps.com/styler/api/
-					
-					$compiler = wp_remote_post('http://premailer.dialect.ca/api/0.1/documents', $args);
-					if ( is_wp_error( $compiler ) ):
-					   $error_message = $compiler->get_error_message(); ?>
-                       <h3><?php _e('Something went wrong!', 'acb_nwsltr');?></h3>
-					   <p><?php echo $error_message; ?></p>
-					<?php else : ?>
-                    <h3><?php printf(__('%s Compiled!', 'acb_nwsltr'), $acb_newsletter->get_the_title());?></h3>
-                    <p><?php _e('Copy and past the below code into your email messaging system.', 'acb_nwsltr'); ?></p>
-                    	<textarea class="large-text code" rows="20"><?php echo esc_html($compiler['body']); //_e('Loading...', 'acb_nwsltr'); ?></textarea>
-                    <?php endif;
-					*/
-					?>
+					if($acb_newsletter->start_inlining()):
+						$args = array(
+							'method' => 'POST',
+							'timeout' => 45,
+							'redirection' => 5,
+							'httpversion' => '1.0',
+							'blocking' => true,
+							//'body' => array( 'returnraw' => 'yes', 'source' => $acb_newsletter->email_html ),
+							'body' => array( 
+								'line_length'				=> 65,
+								'adapter'					=> 'nokogiri',
+								'html' 						=> $acb_newsletter->email_html,
+								'base_url'					=> get_bloginfo('url'),
+								'preserve_styles'			=> true,
+								'remove_ids'				=> false,
+								'remove_classes'			=> false,
+								'remove_comments'			=> false
+							)
+						);
+						/**
+						 * Unfortunately, there is no reliable API for inlining an HTML document for email via an HTTP POST request.
+						 * Hence, until such time, the user has to take the html and paste it into an inliner 
+						 *
+						 * Posible inliner APIs include:
+							- http://premailer.dialect.ca/api
+							- http://inlinestyler.torchboxapps.com/styler/api/
+
+						$compiler = wp_remote_post('http://premailer.dialect.ca/api/0.1/documents', $args);
+						if ( is_wp_error( $compiler ) ):
+							 $error_message = $compiler->get_error_message(); ?>
+												 <h3><?php _e('Something went wrong!', 'acb_nwsltr');?></h3>
+							 <p><?php echo $error_message; ?></p>
+						<?php else : ?>
+											<h3><?php printf(__('%s Compiled!', 'acb_nwsltr'), $acb_newsletter->get_the_title());?></h3>
+											<p><?php _e('Copy and past the below code into your email messaging system.', 'acb_nwsltr'); ?></p>
+												<textarea class="large-text code" rows="20"><?php echo esc_html($compiler['body']); //_e('Loading...', 'acb_nwsltr'); ?></textarea>
+											<?php endif;
+						*/
+						?>
 					<h3><?php printf(__('%s Compiled!', 'acb_nwsltr'), $acb_newsletter->get_the_title());?></h3>
                     <p><?php printf(__('Copy and paste the below code into your favorite email inliner. May I suggest %s?', 'acb_nwsltr'), '<a href="http://zurb.com/ink/inliner.php" target="_blank"><strong>Zurb\'s Ink Inliner</strong></a>'); ?></p>
                     <p><?php _e('Then, paste <em>that</em> inlined code into your newsletter messaging service.', 'acb_nwsltr'); ?></p>
@@ -298,7 +332,7 @@ class ACB_Newsletter_Admin {
 	
 	function add_meta_boxes($post_type, $post) {
 		global $wp_meta_boxes;
-		$wp_meta_boxes['e_newsletter']['side']['low']['postimagediv']['title'] = 'Newsletter Image';
+		$wp_meta_boxes['e_newsletter']['side']['low']['postimagediv']['title'] = __('Newsletter Image', 'acb_nwsltr');
 		
 		//For Newsletter Items
 		
@@ -308,16 +342,16 @@ class ACB_Newsletter_Admin {
 			__('Newsletter Items', 'acb_nwsltr'),
 			array($this, 'acb_newsletter_items'),
 			'e_newsletter',
-			'advanced',
+			'normal',
 			'high'
 		);
 		add_meta_box( 
 			'newsletter_sponsor',
-			__('Newsletter Sponsor', 'acb_nwsltr'),
+			__('Newsletter Sidebar', 'acb_nwsltr'),
 			array($this, 'acb_newsletter_sponsor'),
 			'e_newsletter',
 			'side',
-			'low'
+			'default'
 		);
 		add_meta_box( 
 			'newsletter_item_guide',
@@ -327,31 +361,60 @@ class ACB_Newsletter_Admin {
 			'side',
 			'high'
 		);
+		$atn_pts = get_post_types( array(
+			'show_ui' => true,
+			'_builtin' => false
+		) );
+		if(($key = array_search('e_newsletter', $atn_pts)) !== false) {
+			unset($atn_pts[$key]);
+		}
+		array_push($atn_pts, 'page', 'post');
+		
+		foreach($atn_pts as $atn_pt){
+			add_meta_box( 
+				'add_to_newsletter',
+				__('Add To Newsletter', 'acb_nwsltr'),
+				array($this, 'acb_add_to_newsletter'),
+				$atn_pt,
+				'side',
+				'high'
+			);
+		}
 	}
 	
 	//Meta Box Content	
-	function acb_newsletter_items(){
+	public function acb_newsletter_items(){
 		global $post;
 		$items = get_post_meta( $post->ID, 'acb_newsletter_items_list', true );
-		$items = $items && is_array($items) ? implode(',', $items) : '';
 		wp_nonce_field( 'acb_newsletter_items', 'acb_newsletter_items_nonce' );
 		
+		$boxes = array();
+		if($items && is_array($items)){
+			$items = array_unique($items);
+			foreach($items as $i){
+				$boxes[] = $this->widgetize_newsletter_items($i);
+			}
+			$item_ids_s = implode(',', $items);
+		}
+		else $items = $item_ids_s = '';
+		echo '<p>' . sprintf(__('Drag and drop newsletter items to reorder. To add a new item, go to the post you want to add, search %s in the "Add To Newsletter" meta box and click the button to add. You can also create a new item from scratch %s.', 'acb_nwsltr'), get_the_title(), '<a href="'.admin_url( 'post-new.php?post_type=acb_newsletter_item').'" target="_blank">' . __('here', 'acb_nwsltr') . '</a>') . '</p>';
+		printf('<ul id="acb_newsletter_items_sortable" class="menu">%s</ul>', implode('',$boxes));
 		echo '<label class="screen-reader-text" for="newsletter_items">';
 			_e('List the IDs of the newsletter items to be included, in the order you\d like them.', 'acb_nwsltr');
         echo '</label>';
-		echo '<input type="text" name="newsletter_items" id="newsletter_items" value="'.$items.'" style="width:98%" />';
-		echo '<span class="description">' . __('Comma separated, please.', 'acb_nwsltr') . '</span>';
+		echo '<input type="hidden" name="newsletter_item_ids" id="newsletter_item_ids" value="'.$item_ids_s.'" style="width:98%" />';
+		//echo '<span class="description">' . __('Comma separated, please.', 'acb_nwsltr') . '</span>';
 	}
 	
-	function acb_newsletter_sponsor(){
+	public function acb_newsletter_sponsor(){
 		global $post;
 		$sponsor_text = get_post_meta( $post->ID, 'acb_newsletter_sponsors', true );
 
 		wp_nonce_field( 'acb_newsletter_sponsors', 'acb_newsletter_sponsors_nonce' );
 		
-		echo '<label for="acb_newsletter_sponsors">';
-			_e('Enter the text and images to display under the "Sponsor Highlight" section. Content constrained to 147px', 'acb_nwsltr');
-        echo '</label>';
+		echo '<p><label for="acb_newsletter_sponsors">';
+			_e('Enter the text and images to display in the sidebar if your theme supports it. Keep in mind content is constrained to the sidebar width.', 'acb_nwsltr');
+        echo '</label></p>';
 		wp_editor($sponsor_text, 'nwsltrsponsortxt', array(
 				'wpautop'       =>      true,
 				'media_buttons' =>      true,
@@ -360,27 +423,54 @@ class ACB_Newsletter_Admin {
 		
 	}
 	
-	function acb_newsletter_guide(){
-		printf('<span class="dashicons dashicons-megaphone alignleft" style="font-size: 40px; width: 40px; height: 40px; margin: 0 10px 10px 0;"></span><p><strong>%s</strong></p>', __('When adding images to the editor, remember that the email content is 580px wide, so be sure to resize images to no larger than 580px in width!', 'acb_nwsltr'));
-		printf('<p><strong>%s</strong></p>', __('To show an image above the title, add a "Featured Image", otherwise, just add the image right in the editor.', 'acb_nwsltr'));
+	public function acb_newsletter_guide(){
+		$output = sprintf(
+			'<span class="dashicons dashicons-megaphone alignleft" style="font-size: 40px; width: 40px; height: 40px; margin: 0 10px 10px 0;"></span><p><strong>%s</strong></p>', 
+			__('When adding images to the editor, remember that the email content is a specified width, so be sure to resize images to no larger than that width to avoid the template breaking!', 'acb_nwsltr')
+		);
+		$output .= sprintf(
+			'<p><strong>%s</strong></p>', 
+			__('If your theme allows, use the Featured Image to show a photo, otherwise, just add the image right in the editor.', 'acb_nwsltr')
+		);
+		echo apply_filters('acb_newsletter_item_guide_text', $output);
+	}
+	
+	public function acb_add_to_newsletter(){
+		global $post;
+		
+		?>
+		<div id="acb_newsletter_adding_cont">
+			<p class="acb_newsletter_addto_title"><strong><?php _e('Selected:', 'acb_nwsltr'); ?></strong> <code>NONE</code></p>
+			
+			<input type="text" id="acb-newsletter-addto-suggest" name="acb_newsletter_addto_suggest" class="newtag form-input-tip" size="16" autocomplete="off" value="">
+			<input type="hidden" id="acb-newsletter-addto" name="acb_newsletter_addto" value="" />
+			<?php wp_nonce_field( 'acb_newsletter_add_item', 'acb_newsletter_add_item_nonce' ); ?>
+
+			<div id="acb-newsletter-add-cont">
+				<input type="button" name="acb_newsletter_adding" id="acb-newsletter-adding" class="button button-primary" value="<?php _e('Add to Newsletter', 'acb_nwsltr'); ?>" disabled />
+				<span class="spinner"></span>
+			</div>
+
+		</div>
+		<?php
 	}
 			
 	//Saving Meta
-	function save_metadata( $post_id ) {
+	public function save_metadata( $post_id ) {
 		// verify if this is an auto save routine. 
 		// If it is our form has not been submitted, so we dont want to do anything
 		if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) 
 		  return;
 		
 		// Check permissions
-		if ( 'e_newsletter' == $_POST['post_type'] ) {
+		if ( isset($_POST['post_type']) && 'e_newsletter' == $_POST['post_type'] ) {
 			if ( !current_user_can( 'edit_post', $post_id ) ) return;
 		}
 		
 		// OK, we're authenticated: we need to find and save the data
 		if ( isset( $_POST['acb_newsletter_items_nonce'] ) && wp_verify_nonce( $_POST['acb_newsletter_items_nonce'], 'acb_newsletter_items' ) ) {
 
-			$newsletter_items = sanitize_text_field( $_POST['newsletter_items'] );
+			$newsletter_items = sanitize_text_field( $_POST['newsletter_item_ids'] );
 			
 			$newsletter_items_arr = $items = array();
 			if($newsletter_items){
@@ -396,11 +486,142 @@ class ACB_Newsletter_Admin {
 		
 		if ( isset( $_POST['acb_newsletter_sponsors_nonce'] ) && wp_verify_nonce( $_POST['acb_newsletter_sponsors_nonce'], 'acb_newsletter_sponsors' ) ) {
 			if(isset($_POST['acb_newsletter_sponsors']) && $_POST['acb_newsletter_sponsors'] != '')
-                update_post_meta($post_id, 'acb_newsletter_sponsors', $_POST['acb_newsletter_sponsors']);
+        update_post_meta($post_id, 'acb_newsletter_sponsors', $_POST['acb_newsletter_sponsors']);
 			else delete_post_meta($post_id, 'acb_newsletter_sponsors');
 		}
 		
 	}
+	
+	public function newsletter_lookup(){
+		global $wpdb;
+		
+    $search = like_escape($_REQUEST['q']);
+		
+		$query = $wpdb->prepare(
+			"SELECT ID, post_title, post_date FROM $wpdb->posts
+       WHERE post_title LIKE '%%%s%%'
+       	AND post_type = %s
+        AND post_status = %s
+       ORDER BY post_title ASC",
+			$search,
+			'e_newsletter',
+			'publish'
+		);
+
+    foreach ($wpdb->get_results($query) as $row) {
+			$post_title = $row->post_title;
+
+			echo apply_filters('acb_newsletters_suggest', sprintf('<span class="acbnpt">%s</span> <span class="acbnm">(%s)</span><span class="acbnid" style="display: none;">[[@%d@]]</span>' . "\n", $post_title, get_the_date( 'j M Y', $row->ID ), $row->ID), $row);
+    }
+    die();
+	}
+	
+	public function acb_newsletter_get_posturl_by_id(){
+		$r = array();
+		
+		if(!isset($_REQUEST['id']) || empty($_REQUEST['id'])) {
+			$status = 'error';
+			$msg = __('No post ID supplied', 'acb_nwsltr');
+		}
+		else{
+		
+			$p = get_post($_REQUEST['id']);
+			if(!$p) {
+				$status = 'error';
+				$msg = __('No post found with supplied ID', 'acb_nwsltr');
+			}
+			else {
+				$status = 'success';
+				$msg = get_permalink($p);
+			}
+
+		}
+		$r['status'] = $status;
+		$r['msg'] = $msg;
+		wp_send_json($r);
+	}
+	
+	public function acb_newsletter_add_item(){
+		check_ajax_referer( 'acb_newsletter_add_item', 'security' );
+				
+		$item_id = isset($_REQUEST['post_id']) ? $_REQUEST['post_id'] : false;
+		$news_id = isset($_REQUEST['nwsltr_id']) ? $_REQUEST['nwsltr_id'] : false;
+		
+		if(!$item_id || !$news_id) {
+			$r = __('Error: Must include a valid post id to add to a valid newsletter', 'acb_nwsltr');
+			wp_send_json($r);
+		}
+		
+		$item = get_post($item_id);
+		if(get_post_type($item) == 'acb_newsletter_item')
+			$new_item_id = $item->ID;
+		else {
+			//create a new acb_newsletter_item post type and then set it to $new_item_id
+			$new_item_id = wp_insert_post( wp_slash(array(
+				'post_content' => $item->post_content,
+				'post_content_filtered' => $item->post_content_filtered,			
+				'post_status' => 'publish',
+				'post_title' => get_the_title($item),
+				'post_type' => 'acb_newsletter_item',
+			) ) );
+			
+			//check if there's an image to add
+			$post_thumbnail_id = get_post_thumbnail_id( $item->ID );
+			if($post_thumbnail_id)
+				set_post_thumbnail( $new_item_id, $post_thumbnail_id );
+			
+			//add reference post id to meta
+			add_post_meta($new_item_id, '_acb_newsletter_ref_postid', $item_id, true);
+			
+		}
+		
+		$c_items = get_post_meta( $news_id, 'acb_newsletter_items_list', true );
+		if(!$c_items){
+			$c_items = array($new_item_id);
+		}
+		elseif(!is_array($c_items)) {
+			$c_items .= ',' . $new_item_id;
+			$c_items = explode(',', $c_items);
+		}
+		else $c_items[] = $new_item_id;
+		
+		update_post_meta($news_id, 'acb_newsletter_items_list', $c_items);
+		
+		$r = sprintf(__('Item successfully added to %s!', 'acb_nwsltr'), get_the_title($news_id));
+		echo $r;
+		
+		die();
+		
+	}
+	
+	public function widgetize_newsletter_items($id){
+		$p = get_post($id);
+		if(!$p) return;
+		
+		ob_start(); ?>
+		<li id="newsletter-item-<?php echo $id; ?>" class="menu-item menu-item-depth-0 menu-item-page menu-item-edit-inactive" data-newsletteritemid="<?php echo $id; ?>">
+			<div class="menu-item-bar">
+				<div class="menu-item-handle ui-sortable-handle">
+					<span class="item-title"><span class="menu-item-title"><?php echo get_the_title($p); ?></span></span>
+					<span class="item-controls">
+						<span class="item-type"><a href="<?php echo get_edit_post_link($id); ?>" target="_blank"><?php _e('Edit', 'acb_nwsltr'); ?> <span class="dashicons dashicons-external"></span></a></span>
+						<a class="newsletter-item-delete" id="delete-<?php echo $id; ?>" href="<?php echo get_edit_post_link(); ?>#newsletter-item-delete-<?php echo $id; ?>" title="<?php _e('Delete item', 'nwsltr'); ?>"><span class="dashicons dashicons-trash"></span></a>
+					</span>
+				</div>
+			</div>
+			
+			<div class="menu-item-settings wp-clearfix" style="display: block;">
+				<p class="description description-wide">
+					<?php echo $p->post_content; ?>
+				</p>
+
+			</div>
+
+		</li>
+		
+		<?php return ob_get_clean();
+	}
+	
 }
 
 new ACB_Newsletter_Admin();

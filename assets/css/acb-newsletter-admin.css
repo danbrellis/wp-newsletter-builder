@@ -1,8 +1,20 @@
 @charset "utf-8";
 /* CSS Document */
 
-body#tinymce {
-  max-width: 600px !important;
-  font-size: 14px !important;
-  line-height: 18px !important;
+#acb_newsletter_adding_cont code {
+	width: 100%;
+}
+#acb-newsletter-addto-suggest {
+	width: 99%;
+}
+#acb-newsletter-add-cont {
+	margin-top: 10px;
+	overflow: hidden
+}
+#acb-newsletter-add-cont input {
+	float: right;
+}
+
+.newsletter-item-delete span {
+	line-height: 44px;
 }

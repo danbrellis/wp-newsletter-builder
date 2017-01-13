@@ -1,7 +1,7 @@
 <?php
 /*
-Plugin Name: CCLC Newsletter
-Description: A web-based solution for generating the CCLC e-newsletter. Adopted from a similar plugin created for the Alliance for the Chesapeake Bay.
+Plugin Name: WP Newsletter HTML Builder
+Description: A web-based solution for generating the HTML for an e-newsletter. Use the provided template or add your own. Create a new newsletter and then add your Newsletter Articles to it using custom post types.
 Author: Dan Brellis
 
 Note: If theme styles conflict with newsletter layout, add the follow code into your theme's function.php
@@ -59,7 +59,7 @@ class ACBNEWS {
 		
 		//Imagery
 		if(function_exists( 'add_image_size' )){ 
-			add_image_size( 'newsletter-hero', 600 );
+			add_image_size( 'newsletter-hero', apply_filters('acb_newsletter_hero_size', 548) );
 		}
 	}
 
@@ -187,9 +187,11 @@ class ACBNEWS {
 				'capability_type'    => 'post',
 				'has_archive'        => false,
 				'hierarchical'       => false,
-				'supports'           => array( 'title', 'editor', 'author', 'revisions', 'thumbnail', 'excerpt' )
+				'supports'           => array( 'title', 'editor', 'author', 'revisions', 'thumbnail' )
 			)
 		);
+		
+		
 	}
 	
 	/** Display Functions ****************************************************/
@@ -201,8 +203,9 @@ class ACBNEWS {
 		 global $post;
 	
 		 if ($post->post_type == 'e_newsletter') {
-			  $single_template = dirname( __FILE__ ) . '/includes/single-e_newsletter.php';
+			  $single_template = $this->get_template_part('single', 'e_newsletter', $this->plugin_path().'/includes/', true); //dirname( __FILE__ ) . '/includes/single-e_newsletter.php';
 		 }
+		//var_dump($this->get_template_part('single', 'e_newsletter', $this->plugin_url().'/includes/', true));
 		 return $single_template;
 	}
 
@@ -216,12 +219,12 @@ class ACBNEWS {
 	 * @param string $name (default: '')
 	 * @return void
 	 */
-	public function get_template_part( $slug, $name = '', $custom_dir = '' ) {
+	public function get_template_part( $slug, $name = '', $custom_dir = '', $return = false ) {
 		$template = '';
 
-		// Look in yourtheme/slug-name.php and yourtheme/download-monitor/slug-name.php
+		// Look in yourtheme/slug-name.php and yourtheme/wp-newsletter-builder/slug-name.php
 		if ( $name )
-			$template = locate_template( array ( "{$slug}-{$name}.php", "acb-newsletter/{$slug}-{$name}.php" ) );
+			$template = locate_template( array ( "{$slug}-{$name}.php", "plugins/wp-newsletter-builder/templates/{$slug}-{$name}.php" ) );
 
 		// Get default slug-name.php
 		if ( ! $template && $name && file_exists( $this->plugin_path() . "/templates/{$slug}-{$name}.php" ) )
@@ -231,20 +234,22 @@ class ACBNEWS {
 		if ( ! $template && $custom_dir && file_exists( trailingslashit( $custom_dir ) . "{$slug}-{$name}.php" ) )
 			$template = trailingslashit( $custom_dir ) . "{$slug}-{$name}.php";
 
-		// If template file doesn't exist, look in yourtheme/slug.php and yourtheme/download-monitor/slug.php
+		// If template file doesn't exist, look in yourtheme/slug.php and yourtheme/plugins/wp-newsletter-builder/templates/slug.php
 		if ( ! $template )
-			$template = locate_template( array( "{$slug}.php", "acb-newsletter/{$slug}.php" ) );
+			$template = locate_template( array( "{$slug}.php", "plugins/wp-newsletter-builder/templates/{$slug}.php" ) );
 
 		// If a custom path was defined, check that next
 		if ( ! $template && $custom_dir && file_exists( trailingslashit( $custom_dir ) . "{$slug}-{$name}.php" ) )
-			$template = trailingslashit( $custom_dir ) . "{$slug}.php";
+			$template = trailingslashit( $custom_dir ) . "{$slug}-{$name}.php";
 
 		// Get default slug-name.php
 		if ( ! $template && file_exists( $this->plugin_path() . "/templates/{$slug}.php" ) )
 			$template = $this->plugin_path() . "/templates/{$slug}.php";
 
-		if ( $template )
-			load_template( $template, false );
+		if ( $template ){
+			if($return) return $template;
+			else load_template( $template, false );
+		}
 	}
 	
 	/**
@@ -279,5 +284,12 @@ class ACBNEWS {
  * Init download_monitor class
  */
 $GLOBALS['ACBNEWS'] = new ACBNEWS();
+
+function acb_news_wp_enqueue_scripts() {
+	if ( 'e_newsletter' == get_post_type() && is_single() && !is_admin() ){
+		wp_dequeue_style('sage/css');
+	}
+}
+add_action('wp_enqueue_scripts', 'acb_news_wp_enqueue_scripts', 99999);
 
 ?>

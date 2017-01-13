@@ -30,7 +30,7 @@
 
 .acb_newsletter #dynamic-newsletter-wrapper.newsletter-frame-wrapper {
 	overflow-y: scroll;
-	padding-top:20px;
+	/*padding-top:20px;*/
 }
 
 html {
