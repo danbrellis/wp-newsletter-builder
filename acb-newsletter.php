@@ -3,6 +3,7 @@
 Plugin Name: WP Newsletter HTML Builder
 Description: A web-based solution for generating the HTML for an e-newsletter. Use the provided template or add your own. Create a new newsletter and then add your Newsletter Articles to it using custom post types.
 Author: Dan Brellis
+Author URL: https://github.com/danbrellis/
 
 Note: If theme styles conflict with newsletter layout, add the follow code into your theme's function.php
 function acb_news_wp_enqueue_scripts() {
