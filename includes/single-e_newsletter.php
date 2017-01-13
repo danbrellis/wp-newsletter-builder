@@ -22,8 +22,8 @@ get_header(); ?>
         <div class="newsletter-navbar">
             <div id="newsletter-navbar-wrapper">
                 <a href="<?php echo get_post_type_archive_link( 'e_newsletter' ); ?>" id="newsletter-archives">&nbsp;&nbsp;&nbsp;<?php _e('Back to the<br />Newsletter Archive', 'acb_nwsltr'); ?></a>
-                <form class="vr_opt_in_form" method="post" action="http://oi.vresp.com?fid=fa85e8e356" target="vr_optin_popup" onsubmit="window.open( 'http://www.verticalresponse.com', 'vr_optin_popup', 'scrollbars=yes,width=600,height=450' ); return true;" style="float:right">
-                  <input type="submit" class="btn btn-default" value="Newsletter Signup" style="float:right"><br>
+                <form class="vr_opt_in_form" method="post" action="http://oi.vresp.com?fid=<?php echo apply_filters('acb_newsletter_vr_optin_fid', '0'); ?>" target="vr_optin_popup" onsubmit="window.open( 'http://www.verticalresponse.com', 'vr_optin_popup', 'scrollbars=yes,width=600,height=450' ); return true;" style="float:right">
+                  <input type="submit" class="btn btn-default" value="<?php _e('Newsletter Signup', 'acb_nwsltr'); ?>" style="float:right"><br>
               </form>
                 <div id="prev-next-newsletter"><?php previous_post_link( '%link', __('previous<br />issue', 'acb_nwsltr') ); ?><?php next_post_link('%link', __('next<br />issue', 'acb_nwsltr')); ?></div>
                 
