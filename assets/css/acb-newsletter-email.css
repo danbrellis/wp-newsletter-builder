@@ -35,7 +35,7 @@
 
 }
 
-.item-hero img {
+.item-hero img, img.item-hero {
 	height: auto;
   margin-bottom: 10px; }
 

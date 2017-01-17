@@ -3,7 +3,6 @@
 Plugin Name: WP Newsletter HTML Builder
 Description: A web-based solution for generating the HTML for an e-newsletter. Use the provided template or add your own. Create a new newsletter and then add your Newsletter Articles to it using custom post types.
 Author: Dan Brellis
-Author URL: https://github.com/danbrellis/
 
 Note: If theme styles conflict with newsletter layout, add the follow code into your theme's function.php
 function acb_news_wp_enqueue_scripts() {
@@ -53,6 +52,8 @@ class ACBNEWS {
 		add_action( 'after_setup_theme', array( $this, 'compatibility' ) );
 		add_action( 'the_post', array( $this, 'setup_download_data' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'frontend_scripts' ) );
+		
+		add_filter( 'post_type_link', array( $this, 'post_type_link' ), 10, 2 );
 		
 		//Templates and output
 		add_filter( 'single_template', array($this, 'single_template') );
@@ -181,8 +182,8 @@ class ACBNEWS {
 					'not_found'          => __( 'No newsletter item found.', 'acb_nwsltr' ),
 					'not_found_in_trash' => __( 'No newsletter items found in Trash.', 'acb_nwsltr' )
 				),
-				'public'             => false,
-				'show_in_nav_menus' => false,
+				'public'             => true,
+				'show_in_nav_menus'  => false,
 				'show_ui'            => true,
 				'show_in_menu'       => 'edit.php?post_type=e_newsletter',
 				'capability_type'    => 'post',
@@ -193,6 +194,27 @@ class ACBNEWS {
 		);
 		
 		
+	}
+	
+	//redirect newsletter items to the newsletter with a hash to that item
+	public function post_type_link($post_link, $post){
+		
+		if(get_post_type($post) == 'acb_newsletter_item'){
+			global $wpdb;
+			$results = $wpdb->get_results( $wpdb->prepare("select post_id from $wpdb->postmeta where meta_value LIKE '%%%d%%'", $post->ID) );
+			
+			if($results && !empty($results) && is_array($results)){
+				foreach($results as $r){
+					$p = get_post($r->post_id);
+					if(get_post_type($p) == 'e_newsletter'){
+						$post_link = get_permalink($p) . '#' . $post->post_name;
+						continue;
+					}
+					//maybe add: else $post_link = 404;
+				}
+			}
+		}
+		return $post_link;
 	}
 	
 	/** Display Functions ****************************************************/
@@ -285,5 +307,12 @@ class ACBNEWS {
  * Init download_monitor class
  */
 $GLOBALS['ACBNEWS'] = new ACBNEWS();
+
+function acb_news_wp_enqueue_scripts() {
+	if ( 'e_newsletter' == get_post_type() && is_single() && !is_admin() ){
+		wp_dequeue_style('sage/css');
+	}
+}
+add_action('wp_enqueue_scripts', 'acb_news_wp_enqueue_scripts', 99999);
 
 ?>

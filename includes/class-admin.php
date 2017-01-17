@@ -361,6 +361,13 @@ class ACB_Newsletter_Admin {
 			'side',
 			'high'
 		);
+		add_meta_box( 
+			'newsletter_item_options',
+			__('Additional Options', 'acb_nwsltr'),
+			array($this, 'acb_newsletter_item_options'),
+			'acb_newsletter_item',
+			'normal'
+		);
 		$atn_pts = get_post_types( array(
 			'show_ui' => true,
 			'_builtin' => false
@@ -435,6 +442,17 @@ class ACB_Newsletter_Admin {
 		echo apply_filters('acb_newsletter_item_guide_text', $output);
 	}
 	
+	public function acb_newsletter_item_options(){
+		global $post;
+		$read_more_link = get_post_meta( $post->ID, 'acb_newsletter_item_read_more_link', true );
+		wp_nonce_field( 'acb_newsletter_item_options', 'acb_newsletter_item_options_nonce' );
+
+		?>
+		<label for="acb_newsletter_item_read_more_link"><strong><?php _e('"Read More" URL'); ?></strong></label><br />
+		<input type="text" value="<?php echo esc_url($read_more_link); ?>" id="acb_newsletter_item_read_more_link" name="acb_newsletter_item_read_more_link" style="width:98%;margin-top:2px;margin-bottom:2px;" />
+		<?php _e('<span class="description">Must begin with http:// or https://</span>');
+	}
+	
 	public function acb_add_to_newsletter(){
 		global $post;
 		
@@ -488,6 +506,12 @@ class ACB_Newsletter_Admin {
 			if(isset($_POST['acb_newsletter_sponsors']) && $_POST['acb_newsletter_sponsors'] != '')
         update_post_meta($post_id, 'acb_newsletter_sponsors', $_POST['acb_newsletter_sponsors']);
 			else delete_post_meta($post_id, 'acb_newsletter_sponsors');
+		}
+		
+		if ( isset( $_POST['acb_newsletter_item_options_nonce'] ) && wp_verify_nonce( $_POST['acb_newsletter_item_options_nonce'], 'acb_newsletter_item_options' ) ) {
+			if(isset($_POST['acb_newsletter_item_read_more_link']) && $_POST['acb_newsletter_item_read_more_link'] != '')
+        update_post_meta($post_id, 'acb_newsletter_item_read_more_link', esc_url_raw($_POST['acb_newsletter_item_read_more_link']));
+			else delete_post_meta($post_id, 'acb_newsletter_item_read_more_link');
 		}
 		
 	}
@@ -573,6 +597,8 @@ class ACB_Newsletter_Admin {
 			//add reference post id to meta
 			add_post_meta($new_item_id, '_acb_newsletter_ref_postid', $item_id, true);
 			
+			//add a link to the ref post id to newsletter item's rad more meta
+			add_post_meta($new_item_id, 'acb_newsletter_item_read_more_link', esc_url_raw(get_permalink($item_id)), true);
 		}
 		
 		$c_items = get_post_meta( $news_id, 'acb_newsletter_items_list', true );
